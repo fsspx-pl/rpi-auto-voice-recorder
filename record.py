@@ -4,6 +4,7 @@ import wave
 import argparse
 import os
 from datetime import datetime
+from status_update import updateChunkStatus
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Record audio')
@@ -69,11 +70,12 @@ if __name__ == "__main__":
     print('Recording %d seconds at %d Hz (%d chunks of size %d)' % (RECORD_SECONDS, RATE, num_chunks, CHUNK))
 
     frames = []
+    prev_status_update = None
 
     for i in range(0, num_chunks):
         data = stream.read(CHUNK)
         print("Recording . . . (chunk %d/%d)" % (i+1, num_chunks), end='\r')
-
+        prev_status_update = updateChunkStatus(i+1, num_chunks, prev_status_update)
         frames.append(data)
 
     # stop Recording
