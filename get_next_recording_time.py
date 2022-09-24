@@ -10,15 +10,15 @@ def setHourAndMinute(d,h_m):
     return d.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
 
 if __name__ == "__main__":
-    mass_times = json.load(open('mass_times.json'))
+    recording_times = json.load(open('recording_times.json'))
 
     now = datetime.now()
     now.hour
     now.minute
 
-    for mt in mass_times:
-        b = setHourAndMinute(datetime.now(), mt['begin'])
-        e = setHourAndMinute(datetime.now(), mt['end'])
+    for t in recording_times:
+        b = setHourAndMinute(datetime.now(), t['begin'])
+        e = setHourAndMinute(datetime.now(), t['end'])
         if now < e:
             print(b.strftime(DATE_FORMAT))
             print(e.strftime(DATE_FORMAT))
