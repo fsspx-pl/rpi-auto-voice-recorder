@@ -3,12 +3,15 @@ import pyaudio
 import wave
 import argparse
 import os
+from datetime import datetime
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Record audio')
-    parser.add_argument('output', type=str, help='Output filename')
+    parser.add_argument('output', help='Output filename')
     parser.add_argument('-r', '--rate', help='Sampling rate (default: 44100)', default=44100)
-    parser.add_argument('-t', '--time', help='Recording time in seconds', required=True)
+    time_arg_group = parser.add_mutually_exclusive_group(required=True)
+    time_arg_group.add_argument('-t', '--time', help='Recording time in seconds')
+    time_arg_group.add_argument('--until', help='Date and time when recording should end (YYYY-MM-DD HH:mm:ss)')
     parser.add_argument('-d', '--device', help='Device index', default=-1)
     args = parser.parse_args()
 
@@ -16,9 +19,20 @@ if __name__ == "__main__":
     outdir = os.path.dirname(args.output)
     if outdir != '': os.makedirs(outdir, exist_ok=True)
 
-    DEVICE_INDEX = int(args.device)
     WAVE_OUTPUT_FILENAME = args.output
-    RECORD_SECONDS = int(args.time)
+
+    # parse time
+    if args.time is not None:
+        RECORD_SECONDS = int(args.time)
+    elif args.until is not None:
+        date = datetime.strptime(args.until, '%Y-%m-%d %H:%M:%S')
+        now = datetime.now()
+        RECORD_SECONDS = (date - now).total_seconds()
+    else:
+        print("missing time argument")
+        exit(1)
+
+    DEVICE_INDEX = int(args.device)
     RATE = int(args.rate)
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
