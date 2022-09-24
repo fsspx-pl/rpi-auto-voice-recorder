@@ -2,3 +2,6 @@ build/
 recordings/
 __pycache__/
 .vscode/
+bin/
+lib/
+pyvenv.cfg
