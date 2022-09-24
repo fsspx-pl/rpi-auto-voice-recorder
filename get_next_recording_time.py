@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
+from common import *
 import json
 from datetime import datetime
 
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 def setHourAndMinute(d,h_m):
     h,m = h_m.split(':')
     return d.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
 
-if __name__ == "__main__":
+def getNextRecordingTime():
     recording_times = json.load(open('recording_times.json'))
 
     now = datetime.now()
@@ -20,9 +20,14 @@ if __name__ == "__main__":
         b = setHourAndMinute(datetime.now(), t['begin'])
         e = setHourAndMinute(datetime.now(), t['end'])
         if now < e:
-            print(b.strftime(DATE_FORMAT))
-            print(e.strftime(DATE_FORMAT))
-            exit(0)
+            return (b,e)
+    return None
 
-    print("no more today")
-    exit(1)
+if __name__ == "__main__":
+    t = getNextRecordingTime()
+    if t is None:
+        print("no more today")
+        exit(1)
+
+    print(t[0].strftime(DATE_FORMAT))
+    print(t[1].strftime(DATE_FORMAT))

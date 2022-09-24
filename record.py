@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--rate', help='Sampling rate (default: 44100)', default=44100)
     time_arg_group = parser.add_mutually_exclusive_group(required=True)
     time_arg_group.add_argument('-t', '--time', help='Recording time in seconds')
-    time_arg_group.add_argument('--until', help='Date and time when recording should end (YYYY-MM-DD HH:mm:ss)')
+    time_arg_group.add_argument('--until', help='Date and time when recording should end ("YYYY-MM-DD HH:mm:ss")')
     parser.add_argument('-d', '--device', help='Device index', default=-1)
     args = parser.parse_args()
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     for i in range(0, num_chunks):
         data = stream.read(CHUNK)
-        print("Recording . . . (chunk %d/%d)" % (i+1, num_chunks))
+        print("Recording . . . (chunk %d/%d)" % (i+1, num_chunks), end='\r')
 
         frames.append(data)
 
