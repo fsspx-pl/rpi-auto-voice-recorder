@@ -1,21 +1,22 @@
+#!/usr/bin/env python3
 import pyaudio
 import wave
 
 if __name__ == "__main__":
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
-    RATE = 16000
+    RATE = 44100
     CHUNK = 1024
     RECORD_SECONDS = 3
-    WAVE_OUTPUT_FILENAME = 'filename'
-    DEVICE_INDEX = 0
+    WAVE_OUTPUT_FILENAME = 'filename.wav'
+    DEVICE_INDEX = -1
 
     audio = pyaudio.PyAudio()
 
-    list_audio = []
-    for x in range(0, audio.get_device_count()):
-        info = audio.get_device_info_by_index(x)
-        print("info {0}".format(info))
+    # list_audio = []
+    # for x in range(0, audio.get_device_count()):
+    #     info = audio.get_device_info_by_index(x)
+    #     print("info {0}".format(info))
 
     # start Recording
     stream = audio.open(input_device_index=DEVICE_INDEX,
@@ -23,7 +24,7 @@ if __name__ == "__main__":
                         channels=CHANNELS,
                         rate=RATE, input=True,
                         frames_per_buffer=CHUNK)
-    # sample_rate=RATE)
+
     print("recording...")
     print('---------------------------------')
     print(int(RATE / CHUNK * RECORD_SECONDS))
