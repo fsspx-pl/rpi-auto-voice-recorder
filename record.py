@@ -41,7 +41,7 @@ if __name__ == "__main__":
     RATE = int(args.rate)
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
-    CHUNK = 1024
+    CHUNK = 4096  # change input buffer overflows, try decreasing to e.g. 1024
 
     audio = pyaudio.PyAudio()
 
