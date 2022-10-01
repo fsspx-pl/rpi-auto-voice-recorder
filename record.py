@@ -99,3 +99,6 @@ if __name__ == "__main__":
     waveFile.close()
 
     print("Saved")
+    
+    # inform about the succesful end of recording
+    prev_status_update = updateChunkStatus(num_chunks, -1, prev_status_update)
