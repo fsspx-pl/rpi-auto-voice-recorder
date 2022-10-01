@@ -1,30 +1,47 @@
 #!/usr/bin/env python3
 
-from common import *
+import argparse
 import json
 from datetime import datetime
 
+from common import *
 
-def setHourAndMinute(d,h_m):
-    h,m = h_m.split(':')
-    return d.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
 
-def getNextRecordingTime():
-    recording_times = json.load(open('recording_times.json'))
+def setTime(d, h_m):
+    hour, minute, *rest = h_m.split(':')
+    second, *_ = rest or [0]
+    return d.replace(hour=int(hour), minute=int(minute), second=int(second), microsecond=0)
+
+
+def getNextRecordingTimeFrom(filepath):
+    recording_times = json.load(open(filepath))
 
     now = datetime.now()
     now.hour
     now.minute
 
     for t in recording_times:
-        b = setHourAndMinute(datetime.now(), t['begin'])
-        e = setHourAndMinute(datetime.now(), t['end'])
+        b = setTime(datetime.now(), t['begin'])
+        e = setTime(datetime.now(), t['end'])
         if now < e:
-            return (b,e)
+            return (b, e)
     return None
 
+
 if __name__ == "__main__":
-    t = getNextRecordingTime()
+    parser = argparse.ArgumentParser(
+        description='Record audio based on the defined time')
+    parser.add_argument('-i', '--input', help='Input recording times as JSON')
+    args = parser.parse_args()
+
+    input_filename = args.input
+
+    if input_filename is None:
+        print("")
+        exit(1)
+
+    t = getNextRecordingTimeFrom(input_filename)
+
     if t is None:
         print("no more today")
         exit(1)
