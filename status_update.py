@@ -5,18 +5,18 @@ import threading
 with open('status_update_config.json') as f:
     config = json.load(f)
 
-def threadPost(url, data):
+def threadPost(url, data, timeout):
     try:
-        x = requests.post(url, json=data, timeout=1.0)
+        x = requests.post(url, json=data, timeout=timeout)
     except:
         pass
 
-def asyncPost(url, data):
-    t = threading.Thread(target=threadPost, args=(url, data))
+def asyncPost(url, data, timeout):
+    t = threading.Thread(target=threadPost, args=(url, data, timeout))
     t.start()
     return t
 
-def updateChunkStatus(chunks_read, chunks_total, previous_update = None):
+def updateChunkStatus(chunks_read, chunks_total, previous_update = None, timeout=1.0):
     # don't post if previous update didn't complete
     if previous_update is not None and previous_update.is_alive():
         return previous_update
@@ -28,4 +28,4 @@ def updateChunkStatus(chunks_read, chunks_total, previous_update = None):
         "chunks_read": chunks_read,
         "chunks_total": chunks_total
     }
-    return asyncPost(url, data)
+    return asyncPost(url, data, timeout)

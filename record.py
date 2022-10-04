@@ -99,6 +99,6 @@ if __name__ == "__main__":
     waveFile.close()
 
     print("Saved")
-    
+
     # inform about the successful end of recording
-    updateChunkStatus(num_chunks, -1, None)
+    updateChunkStatus(num_chunks, -1, timeout = 10.0)
