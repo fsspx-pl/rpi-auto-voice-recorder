@@ -3,8 +3,19 @@ import pyaudio
 import wave
 import argparse
 import os
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from status_update import updateChunkStatus
+
+def write_chunk(data, dir, id):
+    fn = dir + "/" + str(id)
+    with open(fn, "wb") as file:
+        file.write(data)
+
+def read_chunk(dir, id):
+    fn = dir + "/" + str(id)
+    with open(fn, "rb") as file:
+        return file.read()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Record audio')
@@ -26,6 +37,10 @@ if __name__ == "__main__":
 
     WAVE_OUTPUT_FILENAME = args.output
 
+    # create directory for chunks
+    CHUNKS_DIR = args.output + '.chunks'
+    os.makedirs(CHUNKS_DIR, exist_ok=True)
+
     # parse time
     if args.time is not None:
         RECORD_SECONDS = int(args.time)
@@ -41,7 +56,7 @@ if __name__ == "__main__":
     RATE = int(args.rate)
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
-    CHUNK = 4096  # change input buffer overflows, try decreasing to e.g. 1024
+    CHUNK_SIZE = 4096  # change input buffer overflows, try decreasing to e.g. 1024
 
     audio = pyaudio.PyAudio()
 
@@ -60,25 +75,25 @@ if __name__ == "__main__":
                         format=FORMAT,
                         channels=CHANNELS,
                         rate=RATE, input=True,
-                        frames_per_buffer=CHUNK)
+                        frames_per_buffer=CHUNK_SIZE)
 
     print('Stream opened')
 
-    num_chunks = int(RATE / CHUNK * RECORD_SECONDS)
+    num_chunks = int(RATE / CHUNK_SIZE * RECORD_SECONDS)
 
     print('---------------------------------')
     print('Recording %d seconds at %d Hz (%d chunks of size %d)' %
-          (RECORD_SECONDS, RATE, num_chunks, CHUNK))
+          (RECORD_SECONDS, RATE, num_chunks, CHUNK_SIZE))
 
-    frames = []
+    chunks_writing_pool = ProcessPoolExecutor(max_workers = 1)
     prev_status_update = None
 
     for i in range(0, num_chunks):
-        data = stream.read(CHUNK)
+        data = stream.read(CHUNK_SIZE)
         print("Recording . . . (chunk %d/%d)" % (i+1, num_chunks), end='\r')
         prev_status_update = updateChunkStatus(
             i+1, num_chunks, prev_status_update)
-        frames.append(data)
+        chunks_writing_pool.submit(write_chunk, data, CHUNKS_DIR, i)
 
     # stop Recording
     stream.stop_stream()
@@ -88,14 +103,23 @@ if __name__ == "__main__":
     print("Recording finished")
     print('---------------------------------')
 
-    print("Saving to " + WAVE_OUTPUT_FILENAME)
+    print("Saving wave file to " + WAVE_OUTPUT_FILENAME)
 
+    # wait for chunks to be saved
+    chunks_writing_pool.shutdown(wait = True)
+
+    # read all chunks
+    frames = b''
+    for i in range(0, num_chunks):
+        frames += read_chunk(CHUNKS_DIR, i)
+
+    # save wave file
     waveFile = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
     waveFile.setnchannels(CHANNELS)
     waveFile.setsampwidth(2)
     audio.get_sample_size(FORMAT)
     waveFile.setframerate(RATE)
-    waveFile.writeframes(b''.join(frames))
+    waveFile.writeframes(frames)
     waveFile.close()
 
     print("Saved")
