@@ -2,12 +2,14 @@ import requests
 import json
 import threading
 
-with open('status_update_config.json') as f:
+CONFIG_PATH = 'config.json'
+
+with open(CONFIG_PATH) as f:
     config = json.load(f)
 
 def threadPost(url, data, timeout):
     try:
-        x = requests.post(url, json=data, timeout=timeout)
+        requests.post(url, json=data, timeout=timeout)
     except:
         pass
 
@@ -21,10 +23,10 @@ def updateChunkStatus(chunks_read, chunks_total, previous_update = None, timeout
     if previous_update is not None and previous_update.is_alive():
         return previous_update
 
-    url = config["api_url"] + "chunks"
+    url = config.api_url + "chunks"
     data = {
-        "id": config["id"],
-        "password": config["password"],
+        "id": config.id,
+        "password": config.password,
         "chunks_read": chunks_read,
         "chunks_total": chunks_total
     }
