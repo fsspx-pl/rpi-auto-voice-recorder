@@ -129,8 +129,3 @@ if __name__ == "__main__":
 
     # inform about the successful end of recording
     updateChunkStatus(num_chunks, -1, timeout = 10.0)
-
-    print("Sending file to FTP server...")
-    upload(WAVE_OUTPUT_FILENAME)
-
-    print("Sending to FTP finished.")
