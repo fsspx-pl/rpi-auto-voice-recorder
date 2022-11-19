@@ -3,5 +3,10 @@
         "api_url": "https://alekod.pl/status-check/api/rpi-auto-voice-recorder/",
         "id": "fsspx-poznan-1",
         "password": "10&*RWHFHUF(*9*#@9"
+    },
+    "ftp": {
+        "url": "ftp.cluster020.hosting.ovh.net",
+        "user": "zljmtwv",
+        "password": "i1Si52W4wu1z5CR"
     }
 }

@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from status_update import updateChunkStatus
+from ftp_upload import upload
 
 def write_chunk(data, dir, id):
     fn = dir + "/" + str(id)
@@ -122,7 +123,14 @@ if __name__ == "__main__":
     waveFile.writeframes(frames)
     waveFile.close()
 
-    print("Saved")
+    print("Recording saved.")
+    print('---------------------------------')
+
 
     # inform about the successful end of recording
     updateChunkStatus(num_chunks, -1, timeout = 10.0)
+
+    print("Sending file to FTP server...")
+    upload(WAVE_OUTPUT_FILENAME)
+
+    print("Sending to FTP finished.")
