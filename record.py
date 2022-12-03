@@ -6,17 +6,32 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from status_update import updateChunkStatus
-from ftp_upload import upload
+import os, os.path
+import shutil
 
 def write_chunk(data, dir, id):
     fn = dir + "/" + str(id)
     with open(fn, "wb") as file:
         file.write(data)
 
-def read_chunk(dir, id):
-    fn = dir + "/" + str(id)
+def read_chunk(dir, chunk_fn):
+    fn = dir + "/" + chunk_fn
     with open(fn, "rb") as file:
         return file.read()
+    
+def join_chunks(dirname, output, channels, rate):
+    # read all chunks
+    frames = b''
+    for name in os.listdir(dirname):
+        frames += read_chunk(dirname, name)
+
+    # save wave file
+    waveFile = wave.open(output, 'wb')
+    waveFile.setnchannels(channels)
+    waveFile.setsampwidth(2)
+    waveFile.setframerate(rate)
+    waveFile.writeframes(frames)
+    waveFile.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Record audio')
@@ -85,6 +100,7 @@ if __name__ == "__main__":
     print('---------------------------------')
     print('Recording %d seconds at %d Hz (%d chunks of size %d)' %
           (RECORD_SECONDS, RATE, num_chunks, CHUNK_SIZE))
+    print("Folder the chunks will be stored to: " + CHUNKS_DIR)
 
     chunks_writing_pool = ProcessPoolExecutor(max_workers = 1)
     prev_status_update = None
@@ -109,23 +125,12 @@ if __name__ == "__main__":
     # wait for chunks to be saved
     chunks_writing_pool.shutdown(wait = True)
 
-    # read all chunks
-    frames = b''
-    for i in range(0, num_chunks):
-        frames += read_chunk(CHUNKS_DIR, i)
-
-    # save wave file
-    waveFile = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
-    waveFile.setnchannels(CHANNELS)
-    waveFile.setsampwidth(2)
-    audio.get_sample_size(FORMAT)
-    waveFile.setframerate(RATE)
-    waveFile.writeframes(frames)
-    waveFile.close()
+    join_chunks(CHUNKS_DIR, WAVE_OUTPUT_FILENAME, CHANNELS, RATE)
 
     print("Recording saved.")
     print('---------------------------------')
 
-
     # inform about the successful end of recording
     updateChunkStatus(num_chunks, -1, timeout = 10.0)
+
+    shutil.rmtree(CHUNKS_DIR)
