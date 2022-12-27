@@ -1,12 +1,11 @@
-from config import CONFIG_PATH, get_config
+from config import get_config
 from ftplib import FTP
 
 def upload(filepath):
-    config = get_config(CONFIG_PATH)
-    ftp_config = config['ftp']
-    url = ftp_config["url"]
-    user = ftp_config["user"]
-    passwd = ftp_config["password"]
+    config = get_config()['ftp']
+    url = config['url']
+    user = config['user']
+    passwd = config['password']
     with FTP(host=url, user=user, passwd=passwd) as ftp:
         try:
             ftp.login()

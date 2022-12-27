@@ -37,7 +37,7 @@ if __name__ == "__main__":
         description='Record audio based on the defined time')
     parser.add_argument('-i', '--input', help='Input JSON file', required=True)
     parser.add_argument('-c', '--consecutive',
-                        help='Amount of consecutive entry times from input file, that audio recording will start on.', default=1)
+                        help='Number of consecutive entry times from input file, that audio recording will start on.', default=1)
     parser.add_argument('-d', '--device', help='Device index', default=-1)
     args = parser.parse_args()
 
