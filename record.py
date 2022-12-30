@@ -22,7 +22,9 @@ def read_chunk(dir, chunk_fn):
 def join_chunks(dirname, output, channels, rate):
     # read all chunks
     frames = b''
-    for name in os.listdir(dirname):
+    names = os.listdir(dirname)
+    names.sort(key=int)
+    for name in names:
         frames += read_chunk(dirname, name)
 
     # save wave file
