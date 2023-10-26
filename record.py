@@ -1,9 +1,12 @@
+#!/usr/bin/env python3
+
 import torch
 torch.set_num_threads(1)
 import numpy as np
 import pyaudio
 import os
 from ffmpeg import FFmpeg
+import argparse
 
 model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
                               source='local',
@@ -76,7 +79,7 @@ def log_message(logging_queue):
         print(message, flush=True)
         logging_queue.task_done()
 
-def start_recording():
+def start_recording(device_index):
     vad_iterator = VadIterator(model, min_silence_duration_ms=3000, threshold=0.7)
     stream = audio.open(
         format=FORMAT,
@@ -84,7 +87,7 @@ def start_recording():
         rate=SAMPLE_RATE,
         input=True,
         frames_per_buffer=CHUNK,
-        input_device_index=0
+        input_device_index=int(device_index)
     )
 
     audio_data = []
@@ -118,8 +121,13 @@ def start_recording():
                 logging_queue.put("Detected speech ended.")
                 audio_data = []
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Record audio with voice activity detection (VAD)')
+    parser.add_argument('-d', '--device', help='input device index', required=True)
+    args = parser.parse_args()
 
-start_recording()
+    start_recording(args.device)
 
 
 
