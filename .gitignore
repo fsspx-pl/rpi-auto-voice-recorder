@@ -1,8 +1,5 @@
-build/
-recordings/
-__pycache__/
-.vscode/
-bin/
-lib/
-pyvenv.cfg
 .DS_Store
+.env
+.vscode
+vendor
+output

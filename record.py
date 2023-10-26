@@ -1,138 +1,125 @@
-#!/usr/bin/env python3
+import torch
+torch.set_num_threads(1)
+import numpy as np
 import pyaudio
-import wave
-import argparse
 import os
-from concurrent.futures import ProcessPoolExecutor
+from ffmpeg import FFmpeg
+
+model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
+                              source='local',
+                              model='silero_vad',
+                              onnx=True)
+
+(get_speech_timestamps,
+ _, read_audio,
+ VadIterator, _) = utils
+
+# ### Helper Methods
+
+def int2float(sound):
+    abs_max = np.abs(sound).max()
+    sound = sound.astype('float32')
+    if abs_max > 0:
+        sound *= 1/32768
+    sound = sound.squeeze()  # depends on the use case
+    return sound
+
+# ## Pyaudio Set-up
+
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+SAMPLE_RATE = 44100
+VAD_TARGET_SAMPLE_RATE = 16000
+CHUNK = int(SAMPLE_RATE / 20)
+
+audio = pyaudio.PyAudio()
+
+import threading
+import queue
+import wave
+import datetime
 from datetime import datetime
-from status_update import updateChunkStatus
-import os, os.path
-import shutil
+from torchaudio import functional
 
-def write_chunk(data, dir, id):
-    fn = dir + "/" + str(id)
-    with open(fn, "wb") as file:
-        file.write(data)
+NUM_SAMPLES = 1536
 
-def read_chunk(dir, chunk_fn):
-    fn = dir + "/" + chunk_fn
-    with open(fn, "rb") as file:
-        return file.read()
+def create_folder_if_not_exists(folder_name):
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+        print(f"Folder '{folder_name}' created.")
+
+def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
+    while True:
+        audio_data, filename = data_queue.get()
+        create_folder_if_not_exists(folder_name)
+        pathname = folder_name + '/' + filename
+        wf = wave.open(pathname, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(audio.get_sample_size(FORMAT))
+        wf.setframerate(SAMPLE_RATE)
+        wf.writeframes(b''.join(audio_data))
+        wf.close()
+        output_file = convert_to_m4a(pathname)
+        duration = len(audio_data) / sample_rate * 1000
+        logging_queue.put("Saved detected speech of {} seconds to a file {}".format(round(duration, 2), output_file))
+        os.remove(pathname)
+        data_queue.task_done()
+
+def convert_to_m4a(input_file):
+    output_file = os.path.splitext(input_file)[0] + ".m4a"
+    FFmpeg().input(input_file).output(output_file, ar=44100).execute()
+    return output_file
+
+def log_message(logging_queue):
+    while True:
+        message = logging_queue.get()
+        print(message, flush=True)
+        logging_queue.task_done()
+
+def start_recording():
+    vad_iterator = VadIterator(model, min_silence_duration_ms=3000, threshold=0.7)
+    stream = audio.open(
+        format=FORMAT,
+        channels=CHANNELS,
+        rate=SAMPLE_RATE,
+        input=True,
+        frames_per_buffer=CHUNK,
+        input_device_index=0
+    )
+
+    audio_data = []
     
-def join_chunks(dirname, output, channels, rate):
-    # read all chunks
-    frames = b''
-    names = os.listdir(dirname)
-    names.sort(key=int)
-    for name in names:
-        frames += read_chunk(dirname, name)
+    logging_queue = queue.Queue()
+    logging_listener = threading.Thread(target=log_message, args=(logging_queue,))
+    logging_listener.start()
 
-    # save wave file
-    waveFile = wave.open(output, 'wb')
-    waveFile.setnchannels(channels)
-    waveFile.setsampwidth(2)
-    waveFile.setframerate(rate)
-    waveFile.writeframes(frames)
-    waveFile.close()
+    data_queue = queue.Queue()
+    save_listener = threading.Thread(target=save_audio, args=(data_queue,logging_queue, SAMPLE_RATE))
+    save_listener.start()
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Record audio')
-    parser.add_argument('output', help='Output filename')
-    parser.add_argument(
-        '-r', '--rate', help='Sampling rate (default: 44100)', default=44100)
-    time_arg_group = parser.add_mutually_exclusive_group(required=True)
-    time_arg_group.add_argument(
-        '-t', '--time', help='Recording time in seconds')
-    time_arg_group.add_argument(
-        '--until', help='Date and time when recording should end ("YYYY-MM-DD HH:mm:ss")')
-    parser.add_argument('-d', '--device', help='Device index', default=-1)
-    args = parser.parse_args()
+    
+    logging_queue.put("Listening for voice activity...")
+    while True:
+        audio_chunk = stream.read(NUM_SAMPLES, exception_on_overflow=False)
+        audio_data.append(audio_chunk)
+    
+        audio_int16 = np.frombuffer(audio_chunk, np.int16)
+        audio_float32 = int2float(audio_int16)
+        tensor_audio_chunk = torch.from_numpy(audio_float32)
+        tensor_audio_chunk_downsampled = functional.resample(tensor_audio_chunk, SAMPLE_RATE, VAD_TARGET_SAMPLE_RATE)
+        
+        speech_dict = vad_iterator(tensor_audio_chunk_downsampled, return_seconds=True)
+        if(speech_dict):
+            if('start' in speech_dict):
+                logging_queue.put("Detected speech started.")
+            if('end' in speech_dict):
+                filename = 'speech-%s.wav' % datetime.now().strftime('%Y%m%d%M%S')
+                data_queue.put((audio_data, filename))
+                logging_queue.put("Detected speech ended.")
+                audio_data = []
 
-    # create output directory if needed
-    outdir = os.path.dirname(args.output)
-    if outdir != '':
-        os.makedirs(outdir, exist_ok=True)
 
-    WAVE_OUTPUT_FILENAME = args.output
+start_recording()
 
-    # create directory for chunks
-    CHUNKS_DIR = args.output + '.chunks'
-    os.makedirs(CHUNKS_DIR, exist_ok=True)
 
-    # parse time
-    if args.time is not None:
-        RECORD_SECONDS = int(args.time)
-    elif args.until is not None:
-        date = datetime.strptime(args.until, '%Y-%m-%d %H:%M:%S')
-        now = datetime.now()
-        RECORD_SECONDS = (date - now).total_seconds()
-    else:
-        print("missing time argument")
-        exit(1)
 
-    DEVICE_INDEX = int(args.device)
-    RATE = int(args.rate)
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 1
-    CHUNK_SIZE = 4096  # change input buffer overflows, try decreasing to e.g. 1024
-
-    audio = pyaudio.PyAudio()
-
-    if DEVICE_INDEX < 0 or DEVICE_INDEX >= audio.get_device_count():
-        DEVICE_INDEX = None  # use default
-        device_name = "DEFAULT"
-    else:
-        info = audio.get_device_info_by_index(DEVICE_INDEX)
-        device_name = info["name"]
-
-    print('---------------------------------')
-    print('Opening stream using device ' + device_name)
-
-    # start Recording
-    stream = audio.open(input_device_index=DEVICE_INDEX,
-                        format=FORMAT,
-                        channels=CHANNELS,
-                        rate=RATE, input=True,
-                        frames_per_buffer=CHUNK_SIZE)
-
-    print('Stream opened')
-
-    num_chunks = int(RATE / CHUNK_SIZE * RECORD_SECONDS)
-
-    print('---------------------------------')
-    print('Recording %d seconds at %d Hz (%d chunks of size %d)' %
-          (RECORD_SECONDS, RATE, num_chunks, CHUNK_SIZE))
-    print("Folder the chunks will be stored to: " + CHUNKS_DIR)
-
-    chunks_writing_pool = ProcessPoolExecutor(max_workers = 1)
-    prev_status_update = None
-
-    for i in range(0, num_chunks):
-        data = stream.read(CHUNK_SIZE)
-        print("Recording . . . (chunk %d/%d)" % (i+1, num_chunks), end='\r')
-        prev_status_update = updateChunkStatus(
-            i+1, num_chunks, prev_status_update)
-        chunks_writing_pool.submit(write_chunk, data, CHUNKS_DIR, i)
-
-    # stop Recording
-    stream.stop_stream()
-    stream.close()
-    audio.terminate()
-
-    print("Recording finished")
-    print('---------------------------------')
-
-    print("Saving wave file to " + WAVE_OUTPUT_FILENAME)
-
-    # wait for chunks to be saved
-    chunks_writing_pool.shutdown(wait = True)
-
-    join_chunks(CHUNKS_DIR, WAVE_OUTPUT_FILENAME, CHANNELS, RATE)
-
-    print("Recording saved.")
-    print('---------------------------------')
-
-    # inform about the successful end of recording
-    updateChunkStatus(num_chunks, -1, timeout = 10.0)
-
-    shutil.rmtree(CHUNKS_DIR)
