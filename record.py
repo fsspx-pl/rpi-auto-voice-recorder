@@ -7,6 +7,13 @@ import pyaudio
 import os
 from ffmpeg import FFmpeg
 import argparse
+import threading
+import queue
+import wave
+import datetime
+from datetime import datetime
+from torchaudio import functional
+from helpers import create_folder_if_not_exists, convert_to_m4a, int2float
 
 model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
                               source='local',
@@ -17,39 +24,16 @@ model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
  _, read_audio,
  VadIterator, _) = utils
 
-# ### Helper Methods
-
-def int2float(sound):
-    abs_max = np.abs(sound).max()
-    sound = sound.astype('float32')
-    if abs_max > 0:
-        sound *= 1/32768
-    sound = sound.squeeze()  # depends on the use case
-    return sound
 
 # ## Pyaudio Set-up
-
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 SAMPLE_RATE = 44100
 VAD_TARGET_SAMPLE_RATE = 16000
+NUM_SAMPLES = 1536
 CHUNK = int(SAMPLE_RATE / 20)
 
 audio = pyaudio.PyAudio()
-
-import threading
-import queue
-import wave
-import datetime
-from datetime import datetime
-from torchaudio import functional
-
-NUM_SAMPLES = 1536
-
-def create_folder_if_not_exists(folder_name):
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-        print(f"Folder '{folder_name}' created.")
 
 def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
     while True:
@@ -67,11 +51,6 @@ def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
         logging_queue.put("Saved detected speech of {} seconds to a file {}".format(round(duration, 2), output_file))
         os.remove(pathname)
         data_queue.task_done()
-
-def convert_to_m4a(input_file):
-    output_file = os.path.splitext(input_file)[0] + ".m4a"
-    FFmpeg().input(input_file).output(output_file, ar=44100).execute()
-    return output_file
 
 def log_message(logging_queue):
     while True:
@@ -100,7 +79,6 @@ def start_recording(device_index):
     save_listener = threading.Thread(target=save_audio, args=(data_queue,logging_queue, SAMPLE_RATE))
     save_listener.start()
 
-    
     logging_queue.put("Listening for voice activity...")
     while True:
         audio_chunk = stream.read(NUM_SAMPLES, exception_on_overflow=False)
