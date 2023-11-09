@@ -14,6 +14,8 @@ import datetime
 from datetime import datetime
 from torchaudio import functional
 from helpers import create_folder_if_not_exists, convert_to_m4a, int2float
+from upload import upload
+from log import log_message
 
 model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
                               source='local',
@@ -49,17 +51,12 @@ def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
         output_file = convert_to_m4a(pathname)
         duration = len(audio_data) / sample_rate * 1000
         logging_queue.put("Saved detected speech of {} seconds to a file {}".format(round(duration, 2), output_file))
+        upload(output_file, filename, logging_queue)
         os.remove(pathname)
         data_queue.task_done()
 
-def log_message(logging_queue):
-    while True:
-        message = logging_queue.get()
-        print(message, flush=True)
-        logging_queue.task_done()
-
-def start_recording(device_index):
-    vad_iterator = VadIterator(model, min_silence_duration_ms=3000, threshold=0.7)
+def start_recording(device_index, padding_ms=1000):
+    vad_iterator = VadIterator(model, min_silence_duration_ms=3000, threshold=0.9)
     stream = audio.open(
         format=FORMAT,
         channels=CHANNELS,
@@ -70,6 +67,9 @@ def start_recording(device_index):
     )
 
     audio_data = []
+    collect_samples = False
+    padding_s = padding_ms/1000
+    padding_chunks = int(SAMPLE_RATE * padding_s / CHUNK)
     
     logging_queue = queue.Queue()
     logging_listener = threading.Thread(target=log_message, args=(logging_queue,))
@@ -91,12 +91,19 @@ def start_recording(device_index):
         
         speech_dict = vad_iterator(tensor_audio_chunk_downsampled, return_seconds=True)
         if(speech_dict):
-            if('start' in speech_dict):
+            if('start' in speech_dict) and not collect_samples:
                 logging_queue.put("Detected speech started.")
-            if('end' in speech_dict):
+                collect_samples = True
+                if(padding_chunks > len(audio_data)):
+                    start_from = 0
+                else:
+                    start_from = padding_chunks
+                audio_data = audio_data[-start_from:]
+            if('end' in speech_dict) and collect_samples:
                 filename = 'speech-%s.wav' % datetime.now().strftime('%Y%m%d%M%S')
                 data_queue.put((audio_data, filename))
                 logging_queue.put("Detected speech ended.")
+                collect_samples = False
                 audio_data = []
 
 if __name__ == "__main__":

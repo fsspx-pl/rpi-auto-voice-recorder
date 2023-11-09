@@ -4,3 +4,5 @@
 vendor
 output
 __pycache__
+storage.json
+.python-version
