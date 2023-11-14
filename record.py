@@ -51,12 +51,12 @@ def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
         output_file = convert_to_m4a(pathname)
         duration = len(audio_data) / sample_rate * 1000
         logging_queue.put("Saved detected speech of {} seconds to a file {}".format(round(duration, 2), output_file))
-        upload(output_file, filename, logging_queue)
+        upload(output_file, os.path.basename(output_file), logging_queue)
         os.remove(pathname)
         data_queue.task_done()
 
 def start_recording(device_index, padding_ms=1000):
-    vad_iterator = VadIterator(model, min_silence_duration_ms=3000, threshold=0.9)
+    vad_iterator = VadIterator(model, min_silence_duration_ms=7000, threshold=0.9)
     stream = audio.open(
         format=FORMAT,
         channels=CHANNELS,
