@@ -14,7 +14,7 @@ import datetime
 from datetime import datetime
 from torchaudio import functional
 from helpers import create_folder_if_not_exists, convert_to_m4a, int2float
-from upload import upload
+from upload import upload as upload_file
 from log import log_message
 
 model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
@@ -37,7 +37,7 @@ CHUNK = int(SAMPLE_RATE / 20)
 
 audio = pyaudio.PyAudio()
 
-def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
+def save_audio(data_queue, logging_queue, sample_rate, upload, folder_name='output'):
     while True:
         audio_data, filename = data_queue.get()
         create_folder_if_not_exists(folder_name)
@@ -51,12 +51,13 @@ def save_audio(data_queue, logging_queue, sample_rate, folder_name='output'):
         output_file = convert_to_m4a(pathname)
         duration = len(audio_data) / sample_rate * 1000
         logging_queue.put("Saved detected speech of {} seconds to a file {}".format(round(duration, 2), output_file))
-        upload(output_file, os.path.basename(output_file), logging_queue)
+        if(upload):
+            upload_file(output_file, os.path.basename(output_file), logging_queue)
         os.remove(pathname)
         data_queue.task_done()
 
-def start_recording(device_index, padding_ms=1000):
-    vad_iterator = VadIterator(model, min_silence_duration_ms=7000, threshold=0.9)
+def start_recording(device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000):
+    vad_iterator = VadIterator(model, min_silence_duration_ms=min_silence_duration_ms, threshold=0.9)
     stream = audio.open(
         format=FORMAT,
         channels=CHANNELS,
@@ -76,7 +77,7 @@ def start_recording(device_index, padding_ms=1000):
     logging_listener.start()
 
     data_queue = queue.Queue()
-    save_listener = threading.Thread(target=save_audio, args=(data_queue,logging_queue, SAMPLE_RATE))
+    save_listener = threading.Thread(target=save_audio, args=(data_queue,logging_queue, SAMPLE_RATE, upload))
     save_listener.start()
 
     logging_queue.put("Listening for voice activity...")
@@ -101,6 +102,9 @@ def start_recording(device_index, padding_ms=1000):
                 audio_data = audio_data[-start_from:]
             if('end' in speech_dict) and collect_samples:
                 filename = 'speech-%s.wav' % datetime.now().strftime('%Y%m%d%M%S')
+                trim_ending = (min_silence_duration_ms)/1000 # as there is min_silence_duration_ms to wait before audio ends
+                trim_ending_chunks = int(SAMPLE_RATE * trim_ending / CHUNK)
+                audio_data = audio_data[:-trim_ending_chunks]
                 data_queue.put((audio_data, filename))
                 logging_queue.put("Detected speech ended.")
                 collect_samples = False
@@ -110,9 +114,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Record audio with voice activity detection (VAD)')
     parser.add_argument('-d', '--device', help='input device index', required=True)
+    parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=7000)
+    parser.add_argument('-u', '--upload', help='should be uploading', default=False)
     args = parser.parse_args()
 
-    start_recording(args.device)
+    start_recording(args.device, args.silence, args.upload)
 
 
 
