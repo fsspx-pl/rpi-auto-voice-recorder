@@ -115,7 +115,7 @@ if __name__ == "__main__":
         description='Record audio with voice activity detection (VAD)')
     parser.add_argument('-d', '--device', help='input device index', required=True)
     parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=7000)
-    parser.add_argument('-u', '--upload', help='should be uploading', default=False)
+    parser.add_argument('-u', '--upload', help='should be uploading', action='store_true')
     args = parser.parse_args()
 
     start_recording(args.device, args.silence, args.upload)
