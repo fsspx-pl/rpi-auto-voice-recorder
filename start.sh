@@ -1,3 +1,3 @@
 #!/bin/bash
 
-python record.py -u -d 1 > $HOME/`date +\%Y\%m\%d\%H\%M\%S*`-cron.log 2>&1
+python record.py -u -d 1 2> $HOME/`date +\%Y\%m\%d\%H\%M\%S`-cron.error.log
