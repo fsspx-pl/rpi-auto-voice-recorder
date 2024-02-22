@@ -16,6 +16,7 @@ from torchaudio import functional
 from helpers import create_folder_if_not_exists, convert_to_m4a, int2float
 from upload import upload as upload_file
 from log import log_message
+from collections import deque
 
 model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
                               source='local',
@@ -71,6 +72,7 @@ def start_recording(device_index, min_silence_duration_ms=7000, upload=False, pa
     collect_samples = False
     padding_s = padding_ms/1000
     padding_chunks = int(SAMPLE_RATE * padding_s / CHUNK)
+    padding_buffer = deque(maxlen=padding_chunks)
     
     logging_queue = queue.Queue()
     logging_listener = threading.Thread(target=log_message, args=(logging_queue,))
@@ -83,7 +85,9 @@ def start_recording(device_index, min_silence_duration_ms=7000, upload=False, pa
     logging_queue.put("Listening for voice activity...")
     while True:
         audio_chunk = stream.read(NUM_SAMPLES, exception_on_overflow=False)
-        audio_data.append(audio_chunk)
+        padding_buffer.append(audio_chunk)
+        if(collect_samples):
+            audio_data.append(audio_chunk)
     
         audio_int16 = np.frombuffer(audio_chunk, np.int16)
         audio_float32 = int2float(audio_int16)
@@ -95,11 +99,7 @@ def start_recording(device_index, min_silence_duration_ms=7000, upload=False, pa
             if('start' in speech_dict) and not collect_samples:
                 logging_queue.put("Detected speech started.")
                 collect_samples = True
-                if(padding_chunks > len(audio_data)):
-                    start_from = 0
-                else:
-                    start_from = padding_chunks
-                audio_data = audio_data[-start_from:]
+                audio_data = list(padding_buffer)
             if('end' in speech_dict) and collect_samples:
                 filename = 'speech-%s.wav' % datetime.now().strftime('%Y%m%d%M%S')
                 trim_ending = (min_silence_duration_ms)/1000 # as there is min_silence_duration_ms to wait before audio ends
@@ -109,6 +109,7 @@ def start_recording(device_index, min_silence_duration_ms=7000, upload=False, pa
                 logging_queue.put("Detected speech ended.")
                 collect_samples = False
                 audio_data = []
+                padding_buffer.clear()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
