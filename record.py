@@ -59,14 +59,7 @@ def save_audio(data_queue, logging_queue, sample_rate, upload, folder_name='outp
 
 def start_recording(device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000):
     vad_iterator = VadIterator(model, min_silence_duration_ms=min_silence_duration_ms, threshold=0.9)
-    stream = audio.open(
-        format=FORMAT,
-        channels=CHANNELS,
-        rate=SAMPLE_RATE,
-        input=True,
-        frames_per_buffer=CHUNK,
-        input_device_index=int(device_index)
-    )
+    stream = open_stream(device_index)
 
     audio_data = []
     collect_samples = False
@@ -110,6 +103,18 @@ def start_recording(device_index, min_silence_duration_ms=7000, upload=False, pa
                 collect_samples = False
                 audio_data = []
                 padding_buffer.clear()
+                stream.close()
+                stream = open_stream(device_index)
+
+def open_stream(device_index):
+    return audio.open(
+        format=FORMAT,
+        channels=CHANNELS,
+        rate=SAMPLE_RATE,
+        input=True,
+        frames_per_buffer=CHUNK,
+        input_device_index=int(device_index)
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

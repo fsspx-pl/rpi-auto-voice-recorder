@@ -52,9 +52,7 @@ def upload(filepath, target_name, logging_queue, retry_interval=30):
             time.sleep(retry_interval)
             
     logging_queue.put(f"Upload complete for {filepath}. URL: {tus_uploader.url}")
-
-def custom_log(message):
-    print(f"Custom Log: {message}")
+    del(tus_uploader)
 
 if __name__ == "__main__":
     import argparse
