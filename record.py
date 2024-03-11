@@ -17,6 +17,7 @@ from helpers import create_folder_if_not_exists, convert_to_m4a, int2float
 from upload import upload as upload_file
 from log import log_message
 from collections import deque
+from math import floor
 
 model, utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
                               source='local',
@@ -35,30 +36,36 @@ SAMPLE_RATE = 44100
 VAD_TARGET_SAMPLE_RATE = 16000
 NUM_SAMPLES = 1536
 CHUNK = int(SAMPLE_RATE / 20)
+MIN_RECORD_TIME_SECONDS = 15
 
 audio = pyaudio.PyAudio()
 
 def save_audio(data_queue, logging_queue, sample_rate, upload, folder_name='output'):
     while True:
         audio_data, filename = data_queue.get()
-        create_folder_if_not_exists(folder_name)
-        pathname = folder_name + '/' + filename
-        wf = wave.open(pathname, 'wb')
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(audio.get_sample_size(FORMAT))
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(b''.join(audio_data))
-        wf.close()
-        output_file = convert_to_m4a(pathname)
         duration = len(audio_data) / sample_rate * 1000
-        logging_queue.put("Saved detected speech of {} seconds to a file {}".format(round(duration, 2), output_file))
-        if(upload):
-            upload_file(output_file, os.path.basename(output_file), logging_queue)
-        os.remove(pathname)
-        data_queue.task_done()
+        minutes = floor(duration/60)
+        seconds = round(duration % 60)
+        if(duration < MIN_RECORD_TIME_SECONDS):
+            logging_queue.put("Too short speech duration of {}s. Skipping...".format(seconds))
+        else:
+            create_folder_if_not_exists(folder_name)
+            pathname = folder_name + '/' + filename
+            wf = wave.open(pathname, 'wb')
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(audio.get_sample_size(FORMAT))
+            wf.setframerate(SAMPLE_RATE)
+            wf.writeframes(b''.join(audio_data))
+            wf.close()
+            output_file = convert_to_m4a(pathname)
+            logging_queue.put("Saved detected speech of {}m{}s to a file {}".format(minutes, seconds, output_file))
+            if(upload):
+                upload_file(output_file, os.path.basename(output_file), logging_queue)
+            os.remove(pathname)
+            data_queue.task_done()
 
 def start_recording(device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000):
-    vad_iterator = VadIterator(model, min_silence_duration_ms=min_silence_duration_ms, threshold=0.9)
+    vad_iterator = VadIterator(model, min_silence_duration_ms=min_silence_duration_ms, threshold=0.95)
     stream = open_stream(device_index)
 
     audio_data = []
@@ -94,7 +101,7 @@ def start_recording(device_index, min_silence_duration_ms=7000, upload=False, pa
                 collect_samples = True
                 audio_data = list(padding_buffer)
             if('end' in speech_dict) and collect_samples:
-                filename = 'speech-%s.wav' % datetime.now().strftime('%Y%m%d%M%S')
+                filename = 'speech-%s.wav' % datetime.now().strftime('%Y-%-m-%d-%M-%S')
                 trim_ending = (min_silence_duration_ms)/1000 # as there is min_silence_duration_ms to wait before audio ends
                 trim_ending_chunks = int(SAMPLE_RATE * trim_ending / CHUNK)
                 audio_data = audio_data[:-trim_ending_chunks]
