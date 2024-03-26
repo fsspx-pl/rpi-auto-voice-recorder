@@ -102,6 +102,7 @@ class ptzcam():
 #Continuous move functions
     def perform_move(self, timeout):
         # Start continuous move
+        self.requestc.ProfileToken = self.media_profile.token
         ret = self.ptz.ContinuousMove(self.requestc)
         print('Continuous move completed', ret)
         # Wait a certain time
@@ -113,14 +114,26 @@ class ptzcam():
 
     def move_tilt(self, velocity, timeout):
         print('Move tilt...', velocity)
-        self.requestc.Velocity.PanTilt.x = 0.0
-        self.requestc.Velocity.PanTilt.y = velocity
+        self.requestc = {
+            "Velocty": {
+                "PanTilt": {
+                    "x": 0.0,
+                    "y": velocity
+                }
+            }
+        }
         self.perform_move(timeout)
 
     def move_pan(self, velocity, timeout):
         print('Move pan...', velocity)
-        self.requestc.Velocity.PanTilt.x = velocity
-        self.requestc.Velocity.PanTilt.y = 0.0
+        self.requestc = {
+            "Velocty": {
+                "PanTilt": {
+                    "x": velocity,
+                    "y": 0.0
+                }
+            }
+        }
         self.perform_move(timeout)
 
     def zoom(self, velocity, timeout=0):
