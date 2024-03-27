@@ -63,6 +63,7 @@ class ptzcam():
 
         self.requestc = self.ptz.create_type('ContinuousMove')
         self.requestc.ProfileToken = self.media_profile.token
+        self.requestc.Velocity = {}
 
         self.requesta = self.ptz.create_type('AbsoluteMove')
         self.requesta.ProfileToken = self.media_profile.token
@@ -102,7 +103,7 @@ class ptzcam():
 #Continuous move functions
     def perform_move(self, timeout):
         # Start continuous move
-        self.requestc.ProfileToken = self.media_profile.token
+        # self.requestc.ProfileToken = self.media_profile.token
         ret = self.ptz.ContinuousMove(self.requestc)
         print('Continuous move completed', ret)
         # Wait a certain time
@@ -114,24 +115,20 @@ class ptzcam():
 
     def move_tilt(self, velocity, timeout):
         print('Move tilt...', velocity)
-        self.requestc = {
-            "Velocty": {
-                "PanTilt": {
-                    "x": 0.0,
-                    "y": velocity
-                }
+        self.requestc.Velocity = {
+            "PanTilt": {
+                "x": 0.0,
+                "y": velocity
             }
         }
         self.perform_move(timeout)
 
     def move_pan(self, velocity, timeout):
         print('Move pan...', velocity)
-        self.requestc = {
-            "Velocty": {
-                "PanTilt": {
-                    "x": velocity,
-                    "y": 0.0
-                }
+        self.requestc.Velocity = {
+            "PanTilt": {
+                "x": velocity,
+                "y": 0.0
             }
         }
         self.perform_move(timeout)
@@ -169,14 +166,22 @@ class ptzcam():
 
 #Relative move functions --NO ERRORS BUT CAMERA DOES NOT MOVE
     def move_relative(self, pan, tilt, velocity):
-        self.requestr.Translation.PanTilt.x = pan
-        self.requestr.Translation.PanTilt.y = tilt
-        self.requestr.Speed.PanTilt.x = velocity
-        ret = self.requestr.Speed.PanTilt.y = velocity
+        self.requestr.Translation = {
+            "PanTilt": {
+                "x": pan,
+                "y": tilt
+            }
+        }
+        self.requestr.Speed = {
+            "PanTilt": {
+                "x": velocity,
+                "y": velocity
+            }
+        }
         self.ptz.RelativeMove(self.requestr)
         print('Relative move pan-tilt', pan, tilt, velocity)
         sleep(2.0)
-        print('Relative move completed', ret)
+        print('Relative move completed')
         print
 
 #Sets preset set, query and and go to
