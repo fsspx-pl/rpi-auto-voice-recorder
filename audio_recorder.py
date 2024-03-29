@@ -5,7 +5,6 @@ torch.set_num_threads(1)
 import numpy as np
 import pyaudio
 import os
-from ffmpeg import FFmpeg
 import argparse
 import threading
 import queue
@@ -13,11 +12,12 @@ import wave
 import datetime
 from datetime import datetime
 from torchaudio import functional
-from helpers import create_folder_if_not_exists, convert_to_m4a, int2float
+from helpers import create_folder_if_not_exists, convert_to_m4a, from_json, int2float
 from upload import upload as upload_file
 from log import log_message
 from collections import deque
 from math import floor
+import ptz
 
 class AudioRecorder:
     def __init__(self, device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000):
@@ -53,6 +53,15 @@ class AudioRecorder:
         self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, self.upload))
         self.save_listener.start()
 
+        try:
+            self.myCam = ptz.ptzcam()
+        except Exception as e:
+            print(f"Failed to instantiate camera: {e}")
+            self.myCam = None
+        if(self.myCam):
+            self.positions = from_json('camera_positions.json')
+            self.move_to(self.positions['prezbiterium'])
+
     def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='output'):
         while True:
             audio_data, filename = data_queue.get()
@@ -77,7 +86,7 @@ class AudioRecorder:
                 data_queue.task_done()
 
     def start_recording(self):
-        self.vad_iterator = self.VadIterator(self.model, min_silence_duration_ms=self.min_silence_duration_ms, threshold=0.98)
+        self.vad_iterator = self.VadIterator(self.model, min_silence_duration_ms=self.min_silence_duration_ms, threshold=0.997)
         self.stream = self.open_stream(self.device_index)
 
         self.audio_data = []
@@ -110,6 +119,8 @@ class AudioRecorder:
             self.logging_queue.put("Detected speech started.")
             self.collect_samples = True
             self.audio_data = list(self.padding_buffer)
+            if(self.myCam):
+                self.move_to(self.positions['ambona'])
 
     def detect_speech_end(self, speech_dict):
         if(speech_dict and 'end' in speech_dict and self.collect_samples):
@@ -125,6 +136,9 @@ class AudioRecorder:
             self.stream.close()
             self.stream = self.open_stream(self.device_index)
 
+            if(self.myCam):
+                self.move_to(self.positions['prezbiterium'])
+
     def open_stream(self, device_index):
         return self.audio.open(
             format=self.FORMAT,
@@ -134,6 +148,10 @@ class AudioRecorder:
             frames_per_buffer=self.CHUNK,
             input_device_index=int(device_index)
         )
+    
+    def move_to(self, position):
+        self.myCam.move_abspantilt(position.pan, position.tilt, 1)
+        self.myCam.zoom(position.zoom, 1) 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

@@ -11,55 +11,57 @@
 
 from onvif import ONVIFCamera
 from time import sleep
+import logging
+import os
+from dotenv import load_dotenv
+
 
 class ptzcam():
-    def __init__(self):
-        print('IP camera initialization')
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+        if(self.verbose):
+            logging.basicConfig(level=logging.DEBUG)
+        
+        logging.debug('IP camera initialization')
 
-        self.mycam = ONVIFCamera('192.168.1.108', 80, 'admin', 'fsspx1234')
-
-        print('Connected to ONVIF camera')
+        load_dotenv()
+        self.mycam = ONVIFCamera(os.getenv('CAMERA_IP'), int(os.getenv('CAMERA_PORT')), os.getenv('CAMERA_USERNAME'), os.getenv('CAMERA_PASSWORD'))
+        logging.debug('Connected to ONVIF camera')
         # Create media service object
         self.media = self.mycam.create_media_service()
-        print('Created media service object')
-        print
+        logging.debug('Created media service object')
         # Get target profile
         self.media_profile = self.media.GetProfiles()[0]
         # Use the first profile and Profiles have at least one
         token = self.media_profile.token
 
     #PTZ controls  -------------------------------------------------------------
-        print
-        # Create ptz service object
-        print('Creating PTZ object')
+        logging.debug('Creating PTZ object')
         self.ptz = self.mycam.create_ptz_service()
-        print('Created PTZ service object')
-        print
+        logging.debug('Created PTZ service object')
+
 
         #Get available PTZ services
         request = self.ptz.create_type('GetServiceCapabilities')
         Service_Capabilities = self.ptz.GetServiceCapabilities(request)
-        print('PTZ service capabilities:')
-        print(Service_Capabilities)
-        print
+        logging.debug('PTZ service capabilities:')
+        logging.debug(Service_Capabilities)
 
         #Get PTZ status
         status = self.ptz.GetStatus({'ProfileToken':token})
-        print('PTZ status:')
-        print(status)
-        print('Pan position:', status.Position.PanTilt.x)
-        print('Tilt position:', status.Position.PanTilt.y)
-        print('Zoom position:', status.Position.Zoom.x)
-        print('Pan/Tilt Moving?:', status.MoveStatus.PanTilt)
-        print
+        logging.debug('PTZ status:')
+        logging.debug(status)
+        logging.debug('Pan position:', status.Position.PanTilt.x)
+        logging.debug('Tilt position:', status.Position.PanTilt.y)
+        logging.debug('Zoom position:', status.Position.Zoom.x)
+        logging.debug('Pan/Tilt Moving?:', status.MoveStatus.PanTilt)
 
         # Get PTZ configuration options for getting option ranges
         request = self.ptz.create_type('GetConfigurationOptions')
         request.ConfigurationToken = self.media_profile.PTZConfiguration.token
         ptz_configuration_options = self.ptz.GetConfigurationOptions(request)
-        print('PTZ configuration options:')
-        print(ptz_configuration_options)
-        print
+        logging.debug('PTZ configuration options:')
+        logging.debug(ptz_configuration_options)
 
         self.requestc = self.ptz.create_type('ContinuousMove')
         self.requestc.ProfileToken = self.media_profile.token
@@ -67,15 +69,13 @@ class ptzcam():
 
         self.requesta = self.ptz.create_type('AbsoluteMove')
         self.requesta.ProfileToken = self.media_profile.token
-        print('Absolute move options')
-        print(self.requesta)
-        print
+        logging.debug('Absolute move options')
+        logging.debug(self.requesta)
 
         self.requestr = self.ptz.create_type('RelativeMove')
         self.requestr.ProfileToken = self.media_profile.token
-        print('Relative move options')
-        print(self.requestr)
-        print
+        logging.debug('Relative move options')
+        logging.debug(self.requestr)
 
         self.requests = self.ptz.create_type('Stop')
         self.requests.ProfileToken = self.media_profile.token
@@ -86,35 +86,32 @@ class ptzcam():
         self.requestg = self.ptz.create_type('GotoPreset')
         self.requestg.ProfileToken = self.media_profile.token
 
-        print('Initial PTZ stop')
-        print
+        logging.debug('Initial PTZ stop')
         self.stop()
 
 #Stop pan, tilt and zoom
     def stop(self):
         self.requests.PanTilt = True
         self.requests.Zoom = True
-        print('Stop:')
-        #print(self.requests)
-        print
+        logging.debug('Stop:')
+        #logging.debug(self.requests)
         self.ptz.Stop(self.requests)
-        print('Stopped')
+        logging.debug('Stopped')
 
 #Continuous move functions
     def perform_move(self, timeout):
         # Start continuous move
         # self.requestc.ProfileToken = self.media_profile.token
         ret = self.ptz.ContinuousMove(self.requestc)
-        print('Continuous move completed', ret)
+        logging.debug('Continuous move completed', ret)
         # Wait a certain time
         sleep(timeout)
         # Stop continuous move
         self.stop()
         sleep(2)
-        print
 
     def move_tilt(self, velocity, timeout):
-        print('Move tilt...', velocity)
+        logging.debug('Move tilt...', velocity)
         self.requestc.Velocity = {
             "PanTilt": {
                 "x": 0.0,
@@ -124,7 +121,7 @@ class ptzcam():
         self.perform_move(timeout)
 
     def move_pan(self, velocity, timeout):
-        print('Move pan...', velocity)
+        logging.debug('Move pan...', velocity)
         self.requestc.Velocity = {
             "PanTilt": {
                 "x": velocity,
@@ -134,7 +131,7 @@ class ptzcam():
         self.perform_move(timeout)
 
     def zoom(self, velocity, timeout=0):
-        print('Zoom...', velocity)
+        logging.debug('Zoom...', velocity)
         self.requestc.Velocity = {
             "Zoom": {
                 "x": velocity
@@ -156,13 +153,12 @@ class ptzcam():
                 "y": velocity
             }
         }
-        print('Absolute move to:', self.requesta.Position)
-        print('Absolute speed:',self.requesta.Speed)
+        logging.debug('Absolute move to:', self.requesta.Position)
+        logging.debug('Absolute speed:',self.requesta.Speed)
         ret = self.ptz.AbsoluteMove(self.requesta)
-        print('Absolute move pan-tilt requested:', pan, tilt, velocity)
-        print('Absolute move completed', ret)
+        logging.debug('Absolute move pan-tilt requested:', pan, tilt, velocity)
+        logging.debug('Absolute move completed', ret)
 
-        print
 
 #Relative move functions --NO ERRORS BUT CAMERA DOES NOT MOVE
     def move_relative(self, pan, tilt, velocity):
@@ -179,29 +175,25 @@ class ptzcam():
             }
         }
         self.ptz.RelativeMove(self.requestr)
-        print('Relative move pan-tilt', pan, tilt, velocity)
+        logging.debug('Relative move pan-tilt', pan, tilt, velocity)
         sleep(2.0)
-        print('Relative move completed')
-        print
+        logging.debug('Relative move completed')
 
 #Sets preset set, query and and go to
     def set_preset(self, name):
         self.requestp.PresetName = name
         self.requestp.PresetToken = '1'
         self.preset = self.ptz.SetPreset(self.requestp)  #returns the PresetToken
-        print('Set Preset:')
-        print(self.preset)
-        print
+        logging.debug('Set Preset:')
+        logging.debug(self.preset)
 
     def get_preset(self):
         self.ptzPresetsList = self.ptz.GetPresets({'ProfileToken': self.media_profile.token})
-        print('Got preset:')
-        print(self.ptzPresetsList[0])
-        print
+        logging.debug('Got preset:')
+        logging.debug(self.ptzPresetsList[0])
 
     def goto_preset(self, name):
         self.requestg.PresetToken = '1'
         self.ptz.GotoPreset(self.requestg)
-        print('Going to Preset:')
-        print(name)
-        print
+        logging.debug('Going to Preset:')
+        logging.debug(name)
