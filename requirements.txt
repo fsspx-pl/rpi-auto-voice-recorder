@@ -1,8 +1,7 @@
-numpy==1.21.6
+numpy==1.24.2
 torch==2.0.1
 torchaudio==2.0.2
 soundfile==0.12.1
 PyAudio==0.2.13
 onnxruntime==1.16.1
 python-ffmpeg==2.0.4
-tuspy==1.0.1

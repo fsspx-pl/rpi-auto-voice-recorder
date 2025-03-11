@@ -13,17 +13,16 @@ import datetime
 from datetime import datetime
 from torchaudio import functional
 from helpers import create_folder_if_not_exists, convert_to_m4a, from_json, int2float
-from upload import upload as upload_file
+from file_uploader import upload as upload_file
 from log import log_message
 from collections import deque
 from math import floor
 import ptz
 
 class AudioRecorder:
-    def __init__(self, device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000):
+    def __init__(self, device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000, min_record_time_seconds=15):
         self.device_index = device_index
         self.min_silence_duration_ms = min_silence_duration_ms
-        self.upload = upload
         self.padding_ms = padding_ms
         self.model, self.utils = torch.hub.load(repo_or_dir='vendor/silero-vad-master',
                                                 source='local',
@@ -41,7 +40,7 @@ class AudioRecorder:
         self.VAD_TARGET_SAMPLE_RATE = 16000
         self.NUM_SAMPLES = 1536
         self.CHUNK = int(self.SAMPLE_RATE / 20)
-        self.MIN_RECORD_TIME_SECONDS = 15
+        self.MIN_RECORD_TIME_SECONDS = min_record_time_seconds
 
         self.audio = pyaudio.PyAudio()
 
@@ -50,17 +49,23 @@ class AudioRecorder:
         self.logging_listener.start()
 
         self.data_queue = queue.Queue()
-        self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, self.upload))
+        self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, upload))
         self.save_listener.start()
 
+        # Initialize camera-related attributes
+        self.myCam = None
+        self.positions = None
+        
+        # Try to initialize the camera
         try:
+            self.logging_queue.put("Initializing camera")
             self.myCam = ptz.ptzcam()
-        except Exception as e:
-            print(f"Failed to instantiate camera: {e}")
-            self.myCam = None
-        if(self.myCam):
+            # Only load positions and move camera if initialization was successful
             self.positions = from_json('camera_positions.json')
             self.move_to(self.positions['prezbiterium'])
+        except Exception as e:
+            self.logging_queue.put(f"Failed to instantiate camera: {e}")
+            # No need to set self.myCam = None as it's already initialized to None
 
     def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='output'):
         while True:
@@ -69,7 +74,7 @@ class AudioRecorder:
             minutes = floor(duration/60)
             seconds = round(duration % 60)
             if(duration < self.MIN_RECORD_TIME_SECONDS):
-                logging_queue.put("Too short speech duration of {}s. Skipping...".format(seconds))
+                logging_queue.put("Too short speech duration of {}s, it has to be at least {}s. Skipping...".format(seconds, self.MIN_RECORD_TIME_SECONDS))
             else:
                 create_folder_if_not_exists(folder_name)
                 pathname = folder_name + '/' + filename
@@ -80,6 +85,13 @@ class AudioRecorder:
                     wf.writeframes(b''.join(audio_data))
                 output_file = convert_to_m4a(pathname)
                 logging_queue.put("Saved detected speech of {}m{}s to a file {}".format(minutes, seconds, output_file))
+                # Remove the original WAV file after conversion to M4A
+                if output_file != pathname and os.path.exists(output_file):
+                    try:
+                        os.remove(pathname)
+                        logging_queue.put(f"Removed original WAV file: {pathname}")
+                    except Exception as e:
+                        logging_queue.put(f"Error removing WAV file {pathname}: {e}")
                 if(upload):
                     upload_file(output_file, os.path.basename(output_file), logging_queue)
                 os.remove(pathname)
@@ -157,9 +169,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Record audio with voice activity detection (VAD)')
     parser.add_argument('-d', '--device', help='input device index', required=True)
-    parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=7000)
+    parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=7000, type=int)
     parser.add_argument('-u', '--upload', help='should be uploading', action='store_true')
+    parser.add_argument('-m', '--min-record-time-seconds', help='minimum recording time (in seconds)', default=15, type=int)
     args = parser.parse_args()
 
-    audio_recorder = AudioRecorder(args.device, args.silence, args.upload)
-    audio_recorder.start_recording()
+    audio_recorder = AudioRecorder(
+        device_index=args.device,
+        min_silence_duration_ms=args.silence,
+        upload=args.upload,
+        min_record_time_seconds=args.min_record_time_seconds
+    ).start_recording()

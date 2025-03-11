@@ -14,10 +14,17 @@ from time import sleep
 import logging
 import os
 from dotenv import load_dotenv
+import signal
 
+# Define a timeout handler
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Connection timed out")
 
 class ptzcam():
-    def __init__(self, verbose=False):
+    def __init__(self, verbose=False, timeout=5):
         self.verbose = verbose
         if(self.verbose):
             logging.basicConfig(level=logging.DEBUG)
@@ -25,69 +32,87 @@ class ptzcam():
         logging.debug('IP camera initialization')
 
         load_dotenv()
-        self.mycam = ONVIFCamera(os.getenv('CAMERA_IP'), int(os.getenv('CAMERA_PORT')), os.getenv('CAMERA_USERNAME'), os.getenv('CAMERA_PASSWORD'))
-        logging.debug('Connected to ONVIF camera')
-        # Create media service object
-        self.media = self.mycam.create_media_service()
-        logging.debug('Created media service object')
-        # Get target profile
-        self.media_profile = self.media.GetProfiles()[0]
-        # Use the first profile and Profiles have at least one
-        token = self.media_profile.token
+        
+        # Set up the timeout
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)  # Set a timeout
+        
+        try:
+            self.mycam = ONVIFCamera(os.getenv('CAMERA_IP'), int(os.getenv('CAMERA_PORT')), os.getenv('CAMERA_USERNAME'), os.getenv('CAMERA_PASSWORD'))
+            logging.debug('Connected to ONVIF camera')
+            # Create media service object
+            self.media = self.mycam.create_media_service()
+            logging.debug('Created media service object')
+            # Get target profile
+            self.media_profile = self.media.GetProfiles()[0]
+            # Use the first profile and Profiles have at least one
+            token = self.media_profile.token
 
-    #PTZ controls  -------------------------------------------------------------
-        logging.debug('Creating PTZ object')
-        self.ptz = self.mycam.create_ptz_service()
-        logging.debug('Created PTZ service object')
+            #PTZ controls  -------------------------------------------------------------
+            logging.debug('Creating PTZ object')
+            self.ptz = self.mycam.create_ptz_service()
+            logging.debug('Created PTZ service object')
 
 
-        #Get available PTZ services
-        request = self.ptz.create_type('GetServiceCapabilities')
-        Service_Capabilities = self.ptz.GetServiceCapabilities(request)
-        logging.debug('PTZ service capabilities:')
-        logging.debug(Service_Capabilities)
+            #Get available PTZ services
+            request = self.ptz.create_type('GetServiceCapabilities')
+            Service_Capabilities = self.ptz.GetServiceCapabilities(request)
+            logging.debug('PTZ service capabilities:')
+            logging.debug(Service_Capabilities)
 
-        #Get PTZ status
-        status = self.ptz.GetStatus({'ProfileToken':token})
-        logging.debug('PTZ status:')
-        logging.debug(status)
-        logging.debug('Pan position:', status.Position.PanTilt.x)
-        logging.debug('Tilt position:', status.Position.PanTilt.y)
-        logging.debug('Zoom position:', status.Position.Zoom.x)
-        logging.debug('Pan/Tilt Moving?:', status.MoveStatus.PanTilt)
+            #Get PTZ status
+            status = self.ptz.GetStatus({'ProfileToken':token})
+            logging.debug('PTZ status:')
+            logging.debug(status)
+            logging.debug('Pan position:', status.Position.PanTilt.x)
+            logging.debug('Tilt position:', status.Position.PanTilt.y)
+            logging.debug('Zoom position:', status.Position.Zoom.x)
+            logging.debug('Pan/Tilt Moving?:', status.MoveStatus.PanTilt)
 
-        # Get PTZ configuration options for getting option ranges
-        request = self.ptz.create_type('GetConfigurationOptions')
-        request.ConfigurationToken = self.media_profile.PTZConfiguration.token
-        ptz_configuration_options = self.ptz.GetConfigurationOptions(request)
-        logging.debug('PTZ configuration options:')
-        logging.debug(ptz_configuration_options)
+            # Get PTZ configuration options for getting option ranges
+            request = self.ptz.create_type('GetConfigurationOptions')
+            request.ConfigurationToken = self.media_profile.PTZConfiguration.token
+            ptz_configuration_options = self.ptz.GetConfigurationOptions(request)
+            logging.debug('PTZ configuration options:')
+            logging.debug(ptz_configuration_options)
 
-        self.requestc = self.ptz.create_type('ContinuousMove')
-        self.requestc.ProfileToken = self.media_profile.token
-        self.requestc.Velocity = {}
+            self.requestc = self.ptz.create_type('ContinuousMove')
+            self.requestc.ProfileToken = self.media_profile.token
+            self.requestc.Velocity = {}
 
-        self.requesta = self.ptz.create_type('AbsoluteMove')
-        self.requesta.ProfileToken = self.media_profile.token
-        logging.debug('Absolute move options')
-        logging.debug(self.requesta)
+            self.requesta = self.ptz.create_type('AbsoluteMove')
+            self.requesta.ProfileToken = self.media_profile.token
+            logging.debug('Absolute move options')
+            logging.debug(self.requesta)
 
-        self.requestr = self.ptz.create_type('RelativeMove')
-        self.requestr.ProfileToken = self.media_profile.token
-        logging.debug('Relative move options')
-        logging.debug(self.requestr)
+            self.requestr = self.ptz.create_type('RelativeMove')
+            self.requestr.ProfileToken = self.media_profile.token
+            logging.debug('Relative move options')
+            logging.debug(self.requestr)
 
-        self.requests = self.ptz.create_type('Stop')
-        self.requests.ProfileToken = self.media_profile.token
+            self.requests = self.ptz.create_type('Stop')
+            self.requests.ProfileToken = self.media_profile.token
 
-        self.requestp = self.ptz.create_type('SetPreset')
-        self.requestp.ProfileToken = self.media_profile.token
+            self.requestp = self.ptz.create_type('SetPreset')
+            self.requestp.ProfileToken = self.media_profile.token
 
-        self.requestg = self.ptz.create_type('GotoPreset')
-        self.requestg.ProfileToken = self.media_profile.token
+            self.requestg = self.ptz.create_type('GotoPreset')
+            self.requestg.ProfileToken = self.media_profile.token
 
-        logging.debug('Initial PTZ stop')
-        self.stop()
+            logging.debug('Initial PTZ stop')
+            self.stop()
+
+            # Cancel the alarm if everything went well
+            signal.alarm(0)
+            
+        except TimeoutError as e:
+            logging.error(f"Camera connection timed out: {e}")
+            signal.alarm(0)  # Cancel the alarm
+            raise
+        except Exception as e:
+            logging.error(f"Failed to initialize camera: {e}")
+            signal.alarm(0)  # Cancel the alarm
+            raise
 
 #Stop pan, tilt and zoom
     def stop(self):
