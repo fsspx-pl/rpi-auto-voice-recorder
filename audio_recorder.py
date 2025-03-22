@@ -20,7 +20,15 @@ from math import floor
 import ptz
 
 class AudioRecorder:
-    def __init__(self, device_index, min_silence_duration_ms=7000, upload=False, padding_ms=1000, min_record_time_seconds=15):
+    def __init__(
+        self,
+        device_index,
+        min_silence_duration_ms=7000,
+        upload=False,
+        padding_ms=1000,
+        min_record_time_seconds=15,
+        record_video=False
+    ):
         self.device_index = device_index
         self.min_silence_duration_ms = min_silence_duration_ms
         self.padding_ms = padding_ms
@@ -52,20 +60,21 @@ class AudioRecorder:
         self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, upload))
         self.save_listener.start()
 
+        if(not record_video):
+            return
+
         # Initialize camera-related attributes
         self.myCam = None
         self.positions = None
         
         # Try to initialize the camera
-        # try:
-        #     self.logging_queue.put("Initializing camera")
-        #     self.myCam = ptz.ptzcam()
-        #     # Only load positions and move camera if initialization was successful
-        #     self.positions = from_json('camera_positions.json')
-        #     self.move_to(self.positions['prezbiterium'])
-        # except Exception as e:
-        #     self.logging_queue.put(f"Failed to instantiate camera: {e}")
-        #     # No need to set self.myCam = None as it's already initialized to None
+        try:
+            self.logging_queue.put("Initializing camera")
+            self.myCam = ptz.ptzcam()
+            self.positions = from_json('camera_positions.json')
+            self.move_to(self.positions['prezbiterium'])
+        except Exception as e:
+            self.logging_queue.put(f"Failed to instantiate camera: {e}")
 
     def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='output'):
         while True:
@@ -180,11 +189,13 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=7000, type=int)
     parser.add_argument('-u', '--upload', help='should be uploading', action='store_true')
     parser.add_argument('-m', '--min-record-time-seconds', help='minimum recording time (in seconds)', default=15, type=int)
+    parser.add_argument('-c', '--record-video', help='whether to record video', action='store_true')
     args = parser.parse_args()
 
     audio_recorder = AudioRecorder(
         device_index=args.device,
         min_silence_duration_ms=args.silence,
         upload=args.upload,
-        min_record_time_seconds=args.min_record_time_seconds
+        min_record_time_seconds=args.min_record_time_seconds,
+        record_video=args.record_video
     ).start_recording()
