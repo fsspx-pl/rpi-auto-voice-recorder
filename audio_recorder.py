@@ -57,44 +57,52 @@ class AudioRecorder:
         self.positions = None
         
         # Try to initialize the camera
-        try:
-            self.logging_queue.put("Initializing camera")
-            self.myCam = ptz.ptzcam()
-            # Only load positions and move camera if initialization was successful
-            self.positions = from_json('camera_positions.json')
-            self.move_to(self.positions['prezbiterium'])
-        except Exception as e:
-            self.logging_queue.put(f"Failed to instantiate camera: {e}")
-            # No need to set self.myCam = None as it's already initialized to None
+        # try:
+        #     self.logging_queue.put("Initializing camera")
+        #     self.myCam = ptz.ptzcam()
+        #     # Only load positions and move camera if initialization was successful
+        #     self.positions = from_json('camera_positions.json')
+        #     self.move_to(self.positions['prezbiterium'])
+        # except Exception as e:
+        #     self.logging_queue.put(f"Failed to instantiate camera: {e}")
+        #     # No need to set self.myCam = None as it's already initialized to None
 
     def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='output'):
         while True:
-            audio_data, filename = data_queue.get()
-            duration = len(audio_data) / sample_rate * 1000
-            minutes = floor(duration/60)
-            seconds = round(duration % 60)
-            if(duration < self.MIN_RECORD_TIME_SECONDS):
-                logging_queue.put("Too short speech duration of {}s, it has to be at least {}s. Skipping...".format(seconds, self.MIN_RECORD_TIME_SECONDS))
-            else:
-                create_folder_if_not_exists(folder_name)
-                pathname = folder_name + '/' + filename
-                with wave.open(pathname, 'wb') as wf:
-                    wf.setnchannels(self.CHANNELS)
-                    wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
-                    wf.setframerate(self.SAMPLE_RATE)
-                    wf.writeframes(b''.join(audio_data))
-                output_file = convert_to_m4a(pathname)
-                logging_queue.put("Saved detected speech of {}m{}s to a file {}".format(minutes, seconds, output_file))
-                # Remove the original WAV file after conversion to M4A
-                if output_file != pathname and os.path.exists(output_file):
-                    try:
-                        os.remove(pathname)
-                        logging_queue.put(f"Removed original WAV file: {pathname}")
-                    except Exception as e:
-                        logging_queue.put(f"Error removing WAV file {pathname}: {e}")
-                if(upload):
-                    upload_file(output_file, os.path.basename(output_file), logging_queue)
-                os.remove(pathname)
+            try:
+                audio_data, filename = data_queue.get()
+                duration = len(audio_data) / sample_rate * 1000
+                minutes = floor(duration/60)
+                seconds = round(duration % 60)
+                
+                if(duration < self.MIN_RECORD_TIME_SECONDS):
+                    logging_queue.put(f"Too short speech duration of {seconds}s, it has to be at least {self.MIN_RECORD_TIME_SECONDS}s. Skipping...")
+                else:
+                    create_folder_if_not_exists(folder_name)
+                    pathname = folder_name + '/' + filename
+                    
+                    with wave.open(pathname, 'wb') as wf:
+                        wf.setnchannels(self.CHANNELS)
+                        wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
+                        wf.setframerate(self.SAMPLE_RATE)
+                        wf.writeframes(b''.join(audio_data))
+                    
+                    output_file = convert_to_m4a(pathname)
+                    logging_queue.put(f"Saved detected speech of {minutes}m{seconds}s to a file {output_file}")
+                    
+                    if output_file != pathname and os.path.exists(output_file):
+                        try:
+                            os.remove(pathname)
+                            logging_queue.put(f"Removed original WAV file: {pathname}")
+                        except Exception as e:
+                            logging_queue.put(f"Error removing WAV file {pathname}: {e}")
+                    
+                    if(upload):
+                        upload_file(output_file, os.path.basename(output_file), logging_queue)
+                
+                data_queue.task_done()
+            except Exception as e:
+                logging_queue.put(f"Error in save_audio: {e}")
                 data_queue.task_done()
 
     def start_recording(self):
