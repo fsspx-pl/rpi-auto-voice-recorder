@@ -60,12 +60,12 @@ class AudioRecorder:
         self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, upload))
         self.save_listener.start()
 
-        if(not record_video):
-            return
-
         # Initialize camera-related attributes
         self.myCam = None
         self.positions = None
+
+        if(not record_video):
+            return
         
         # Try to initialize the camera
         try:
