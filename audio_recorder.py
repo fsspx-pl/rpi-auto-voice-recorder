@@ -23,7 +23,7 @@ class AudioRecorder:
     def __init__(
         self,
         device_index,
-        min_silence_duration_ms=7000,
+        min_silence_duration_ms=10000,
         upload=False,
         padding_ms=1000,
         min_record_time_seconds=15,
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Record audio with voice activity detection (VAD)')
     parser.add_argument('-d', '--device', help='input device index', required=True)
-    parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=7000, type=int)
+    parser.add_argument('-s', '--silence', help='period of silence (in miliseconds) after which recording gets saved', default=10000, type=int)
     parser.add_argument('-u', '--upload', help='should be uploading', action='store_true')
     parser.add_argument('-m', '--min-record-time-seconds', help='minimum recording time (in seconds)', default=15, type=int)
     parser.add_argument('-c', '--record-video', help='whether to record video', action='store_true')
