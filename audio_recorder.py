@@ -10,6 +10,7 @@ import threading
 import queue
 import wave
 import datetime
+import time
 from datetime import datetime
 from torchaudio import functional
 from helpers import create_folder_if_not_exists, convert_to_m4a, from_json, int2float
@@ -67,14 +68,29 @@ class AudioRecorder:
         if(not record_video):
             return
         
-        # Try to initialize the camera
-        try:
-            self.logging_queue.put("Initializing camera")
-            self.myCam = ptz.ptzcam()
-            self.positions = from_json('camera_positions.json')
-            self.move_to(self.positions['prezbiterium'])
-        except Exception as e:
-            self.logging_queue.put(f"Failed to instantiate camera: {e}")
+        # Try to initialize the camera with retry logic
+        self.logging_queue.put("Initializing camera")
+        max_retries = 5
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                self.myCam = ptz.ptzcam()
+                self.positions = from_json('camera_positions.json')
+                self.move_to(self.positions['prezbiterium'])
+                self.logging_queue.put("Camera initialized successfully")
+                break
+            except Exception as e:
+                if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+                    if attempt < max_retries - 1:
+                        self.logging_queue.put(f"Camera connection timed out, retrying in {retry_delay} seconds... (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(retry_delay)
+                        retry_delay *= 1.5  # Exponential backoff
+                    else:
+                        self.logging_queue.put(f"Failed to connect to camera after {max_retries} attempts: {e}")
+                else:
+                    self.logging_queue.put(f"Failed to instantiate camera: {e}")
+                    break
 
     def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='output'):
         while True:
@@ -179,8 +195,8 @@ class AudioRecorder:
         )
     
     def move_to(self, position):
-        self.myCam.move_abspantilt(position.pan, position.tilt, 1)
-        self.myCam.zoom(position.zoom, 1) 
+        self.myCam.move_abspantilt(position['pan'], position['tilt'], 1)
+        self.myCam.zoom(position['zoom'], 1) 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
