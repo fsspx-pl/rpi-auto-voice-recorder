@@ -131,7 +131,7 @@ class AudioRecorder:
                 data_queue.task_done()
 
     def start_recording(self):
-        self.vad_iterator = self.VadIterator(self.model, min_silence_duration_sec=self.min_silence_duration_sec, threshold=0.9965)
+        self.vad_iterator = self.VadIterator(self.model, min_silence_duration_ms=self.min_silence_duration_sec * 1000, threshold=0.9965)
         self.stream = self.open_stream(self.device_index)
 
         self.audio_data = []
