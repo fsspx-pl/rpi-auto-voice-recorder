@@ -26,8 +26,8 @@ def upload(filepath, target_name, logging_queue, retry_interval=30):
     
     # Determine content type based on file extension
     content_type = "application/octet-stream"
-    if target_name.lower().endswith(('.m4a')):
-        content_type = "audio/m4a"
+    if target_name.lower().endswith(('.wav')):
+        content_type = "audio/wav"
     
     # Create MinIO client
     try:

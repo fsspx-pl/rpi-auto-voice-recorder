@@ -13,7 +13,7 @@ import datetime
 import time
 from datetime import datetime
 from torchaudio import functional
-from helpers import create_folder_if_not_exists, convert_to_m4a, from_json, int2float
+from helpers import create_folder_if_not_exists, from_json, int2float
 from file_uploader import upload as upload_file
 from log import log_message
 from collections import deque
@@ -112,23 +112,22 @@ class AudioRecorder:
                         wf.setframerate(self.SAMPLE_RATE)
                         wf.writeframes(b''.join(audio_data))
                     
-                    output_file = convert_to_m4a(pathname)
+                    output_file = pathname
                     logging_queue.put(f"Saved detected speech of {minutes}m{seconds}s to a file {output_file}")
-                    
-                    if output_file != pathname and os.path.exists(output_file):
-                        try:
-                            os.remove(pathname)
-                            logging_queue.put(f"Removed original WAV file: {pathname}")
-                        except Exception as e:
-                            logging_queue.put(f"Error removing WAV file {pathname}: {e}")
-                    
                     if(upload):
-                        upload_file(output_file, os.path.basename(output_file), logging_queue)
+                        upload_success = upload_file(output_file, os.path.basename(output_file), logging_queue)
+                        if upload_success:
+                            try:
+                                os.remove(output_file)
+                                logging_queue.put(f"Removed local WAV file after successful upload: {output_file}")
+                            except Exception as e:
+                                logging_queue.put(f"Error removing local WAV file {output_file}: {e}")
                 
                 data_queue.task_done()
             except Exception as e:
                 logging_queue.put(f"Error in save_audio: {e}")
                 data_queue.task_done()
+
 
     def start_recording(self):
         self.vad_iterator = self.VadIterator(self.model, min_silence_duration_ms=self.min_silence_duration_sec * 1000, threshold=0.9965)
