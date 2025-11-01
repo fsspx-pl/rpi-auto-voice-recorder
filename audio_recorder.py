@@ -58,7 +58,9 @@ class AudioRecorder:
         self.logging_listener.start()
 
         self.data_queue = queue.Queue()
-        self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, upload))
+        # Use tmpfs for temporary file storage (/dev/shm is a dedicated tmpfs mount)
+        self.tmpfs_dir = '/dev/shm/vad_audio'
+        self.save_listener = threading.Thread(target=self.save_audio, args=(self.data_queue, self.logging_queue, self.SAMPLE_RATE, upload, self.tmpfs_dir))
         self.save_listener.start()
 
         # Initialize camera-related attributes
@@ -92,7 +94,7 @@ class AudioRecorder:
                     self.logging_queue.put(f"Failed to instantiate camera: {e}")
                     break
 
-    def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='output'):
+    def save_audio(self, data_queue, logging_queue, sample_rate, upload, folder_name='/dev/shm/vad_audio'):
         while True:
             try:
                 audio_data, filename = data_queue.get()
@@ -104,7 +106,7 @@ class AudioRecorder:
                     logging_queue.put(f"Too short speech duration of {seconds}s, it has to be at least {self.MIN_RECORD_TIME_SEC}s. Skipping...")
                 else:
                     create_folder_if_not_exists(folder_name)
-                    pathname = folder_name + '/' + filename
+                    pathname = os.path.join(folder_name, filename)
                     
                     with wave.open(pathname, 'wb') as wf:
                         wf.setnchannels(self.CHANNELS)
